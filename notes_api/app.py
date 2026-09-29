@@ -1,109 +1,98 @@
-"""
-Мини-проект: REST API для управления заметками.
-
-Эндпоинты (CRUD):
-  GET    /notes         -- список всех заметок
-  GET    /notes/<id>     -- одна заметка
-  POST   /notes         -- создать заметку
-  PUT    /notes/<id>     -- обновить заметку целиком
-  DELETE /notes/<id>     -- удалить заметку
-
-Запуск:
-  python app.py
-Сервер поднимется на http://127.0.0.1:5000
-"""
-
 from flask import Flask, request, jsonify
-from database import get_connection, init_db
+from flask_sqlalchemy import SQLAlchemy
+from datetime import datetime
+import os
 
 app = Flask(__name__)
 
+# Настраиваем путь к локальному файлу базы данных notes.db
+current_dir = os.path.dirname(os.path.abspath(__file__))
+db_path = os.path.join(current_dir, "notes.db")
 
-# ---------- GET /notes : список всех заметок ----------
+# Указываем SQLAlchemy использовать SQLite
+app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Инициализируем ORM
+db = SQLAlchemy(app)
+
+# Создаем модель таблицы в виде класса Python (Requirement Блока 3)
+class Note(db.Model):
+    __tablename__ = 'notes'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(100), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        """Переводим объект базы данных в обычный словарь для JSON"""
+        return {
+            "id": self.id,
+            "title": self.title,
+            "content": self.content,
+            "created_at": self.created_at.isoformat() if self.created_at else None
+        }
+
+# ---------- GET /notes : получить все заметки ----------
 @app.route("/notes", methods=["GET"])
 def get_notes():
-    conn = get_connection()
-    rows = conn.execute("SELECT * FROM notes ORDER BY id").fetchall()
-    conn.close()
-    # sqlite3.Row не сериализуется в JSON напрямую -- превращаем в dict
-    notes = [dict(row) for row in rows]
-    return jsonify(notes), 200
-
+    # ORM сама делает SQL-запрос SELECT * FROM notes
+    notes_list = Note.query.order_by(Note.id).all()
+    return jsonify([note.to_dict() for note in notes_list]), 200
 
 # ---------- GET /notes/<id> : одна заметка ----------
 @app.route("/notes/<int:note_id>", methods=["GET"])
 def get_note(note_id: int):
-    conn = get_connection()
-    row = conn.execute("SELECT * FROM notes WHERE id = ?", (note_id,)).fetchone()
-    conn.close()
-
-    if row is None:
+    note = Note.query.get(note_id)
+    if note is None:
         return jsonify({"error": "Заметка не найдена"}), 404
-
-    return jsonify(dict(row)), 200
-
+    return jsonify(note.to_dict()), 200
 
 # ---------- POST /notes : создать заметку ----------
 @app.route("/notes", methods=["POST"])
 def create_note():
     data = request.get_json(silent=True)
-
-    # Валидация входных данных -- обязательный шаг, никогда не доверяем клиенту
     if not data or "title" not in data or "content" not in data:
         return jsonify({"error": "Нужны поля 'title' и 'content'"}), 400
 
-    conn = get_connection()
-    cursor = conn.execute(
-        "INSERT INTO notes (title, content) VALUES (?, ?)",
-        (data["title"], data["content"]),
-    )
-    conn.commit()
-    new_id = cursor.lastrowid
-    conn.close()
+    # Создаем объект нашей модели (строку таблицы)
+    new_note = Note(title=data["title"], content=data["content"])
+    db.session.add(new_note)  # Добавляем в сессию
+    db.session.commit()       # Сохраняем в файл базы данных
 
-    return jsonify({"id": new_id, "title": data["title"], "content": data["content"]}), 201
-
+    return jsonify(new_note.to_dict()), 201
 
 # ---------- PUT /notes/<id> : обновить заметку ----------
 @app.route("/notes/<int:note_id>", methods=["PUT"])
 def update_note(note_id: int):
     data = request.get_json(silent=True)
-
     if not data or "title" not in data or "content" not in data:
         return jsonify({"error": "Нужны поля 'title' и 'content'"}), 400
 
-    conn = get_connection()
-    existing = conn.execute("SELECT id FROM notes WHERE id = ?", (note_id,)).fetchone()
-    if existing is None:
-        conn.close()
+    note = Note.query.get(note_id)
+    if note is None:
         return jsonify({"error": "Заметка не найдена"}), 404
 
-    conn.execute(
-        "UPDATE notes SET title = ?, content = ? WHERE id = ?",
-        (data["title"], data["content"], note_id),
-    )
-    conn.commit()
-    conn.close()
+    note.title = data["title"]
+    note.content = data["content"]
+    db.session.commit()
 
-    return jsonify({"id": note_id, "title": data["title"], "content": data["content"]}), 200
-
+    return jsonify(note.to_dict()), 200
 
 # ---------- DELETE /notes/<id> : удалить заметку ----------
 @app.route("/notes/<int:note_id>", methods=["DELETE"])
 def delete_note(note_id: int):
-    conn = get_connection()
-    existing = conn.execute("SELECT id FROM notes WHERE id = ?", (note_id,)).fetchone()
-    if existing is None:
-        conn.close()
+    note = Note.query.get(note_id)
+    if note is None:
         return jsonify({"error": "Заметка не найдена"}), 404
 
-    conn.execute("DELETE FROM notes WHERE id = ?", (note_id,))
-    conn.commit()
-    conn.close()
-
+    db.session.delete(note)
+    db.session.commit()
     return "", 204
 
-
 if __name__ == "__main__":
-    init_db()
+    # Автоматически создаем таблицы внутри файла notes.db при старте
+    with app.app_context():
+        db.create_all()
     app.run(debug=True)
