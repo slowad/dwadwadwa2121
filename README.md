@@ -3,15 +3,12 @@
 REST API для управления заметками с категориями, фильтрацией и пагинацией.
 Итоговый проект учебной практики (блоки 1-4).
 
-**Демо:** https://ТВОЙ-АДРЕС.onrender.com
-
 ## Стек
 
 - Python 3.11, Flask
 - SQLAlchemy ORM (PostgreSQL в проде / SQLite для локальной разработки)
 - pytest (тесты)
 - Docker, gunicorn
-- Хостинг: Render
 
 ## Структура репозитория
 
@@ -32,12 +29,11 @@ REST API для управления заметками с категориям�
 ## Запуск локально
 
 ```bash
-git clone https://github.com/ТВОЙ-АККАУНТ/ТВОЙ-РЕПОЗИТОРИЙ.git
-cd ТВОЙ-РЕПОЗИТОРИЙ
+git clone https://github.com/slowad/dwadwadwa2121.git
+cd dwadwadwa2121
 
 python -m venv .venv
 .venv\Scripts\activate        # Windows
-source .venv/bin/activate     # Mac/Linux
 
 pip install -r requirements.txt
 python app.py
@@ -45,11 +41,7 @@ python app.py
 
 Сервер поднимется на `http://127.0.0.1:5000`.
 
-По умолчанию используется SQLite (`notes.db`). Для PostgreSQL задай переменную окружения:
-```bash
-export DATABASE_URL="postgresql://user:password@localhost:5432/notes_db"
-```
-
+По умолчанию используется SQLite (`notes.db`). 
 ## Запуск через Docker
 
 ```bash
@@ -80,24 +72,4 @@ pytest -v
 
 **Query-параметры `/notes`:** `category_id`, `search`, `page`, `per_page`
 
-## Примеры запросов
 
-```bash
-# Создать категорию
-curl -X POST https://ТВОЙ-АДРЕС.onrender.com/categories \
-  -H "Content-Type: application/json" -d '{"name": "Работа"}'
-
-# Создать заметку
-curl -X POST https://ТВОЙ-АДРЕС.onrender.com/notes \
-  -H "Content-Type: application/json" \
-  -d '{"title": "Купить хлеб", "content": "По дороге домой", "category_id": 1}'
-
-# Список с фильтром и пагинацией
-curl "https://ТВОЙ-АДРЕС.onrender.com/notes?category_id=1&page=1&per_page=10"
-```
-
-## Что можно улучшить дальше
-
-- Аутентификация (JWT) для разграничения заметок по пользователям
-- Кэширование частых запросов
-- CI (GitHub Actions) для автоматического прогона тестов при пуше
